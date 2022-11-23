@@ -2790,7 +2790,7 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 	{
 		//ESP_LOGI(TAG, "what the fuck what's that man");
 		acc_counter = (uint64_t)round(rtc_time_slowclk_to_us(rtc_time_get() - acc_capture, esp_clk_slowclk_cal_get())/1000000);
-		//ESP_LOGI(TAG, "acc_counter: %d s",(int)acc_counter);
+//		ESP_LOGI(TAG, "acc_counter: %d s",(int)acc_counter);
 		if(acc_counter > 180 || Flag_send_DASP == true)
 		{
 			acc_counter = 0;
@@ -3855,15 +3855,15 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 	//ESP_LOGW("WIFI", "------------------> WiFi Previous <------------------");
 	for (int i = 0; i < AP_count_pre; i++){
 		if (WiFi_Previous[i].rssi == 0) continue;
-		//ESP_LOGI("WIFI", "%s               , %02X:%02X:%02X:%02X:%02X:%02X, %d", WiFi_Previous[i].ssid, WiFi_Previous[i].bssid[0], WiFi_Previous[i].bssid[1], WiFi_Previous[i].bssid[2],
-				//WiFi_Previous[i].bssid[3], WiFi_Previous[i].bssid[4], WiFi_Previous[i].bssid[5], WiFi_Previous[i].rssi);
+		ESP_LOGI("WIFI", "%s               , %02X:%02X:%02X:%02X:%02X:%02X, %d", WiFi_Previous[i].ssid, WiFi_Previous[i].bssid[0], WiFi_Previous[i].bssid[1], WiFi_Previous[i].bssid[2],\
+				WiFi_Previous[i].bssid[3], WiFi_Previous[i].bssid[4], WiFi_Previous[i].bssid[5], WiFi_Previous[i].rssi);
 		sprintf(MAC_Serial_Pre + strlen(MAC_Serial_Pre), "%s", WiFi_Previous[i].macserial);
 	}
 
 	//ESP_LOGW("WIFI", "------------------> WiFi Current <------------------");
 	for (int i = 0; i < AP_count_cur; i++){
-		//ESP_LOGI("WIFI", "%s               , %02X:%02X:%02X:%02X:%02X:%02X, %d", WiFi_Current[i].ssid, WiFi_Current[i].bssid[0], WiFi_Current[i].bssid[1], WiFi_Current[i].bssid[2],
-				//WiFi_Current[i].bssid[3], WiFi_Current[i].bssid[4], WiFi_Current[i].bssid[5], WiFi_Current[i].rssi);
+		ESP_LOGI("WIFI", "%s               , %02X:%02X:%02X:%02X:%02X:%02X, %d", WiFi_Current[i].ssid, WiFi_Current[i].bssid[0], WiFi_Current[i].bssid[1], WiFi_Current[i].bssid[2],\
+				WiFi_Current[i].bssid[3], WiFi_Current[i].bssid[4], WiFi_Current[i].bssid[5], WiFi_Current[i].rssi);
 		sprintf(MAC_Serial_Cur + strlen(MAC_Serial_Cur), "%s", WiFi_Current[i].macserial);
 	}
 
@@ -4117,8 +4117,8 @@ static void wifi_scan(void)
 					}
 				}
 			}
-			//ESP_LOGI(TAG, "%s", MAC_Serial_cn1);
-			//ESP_LOGI(TAG, "%s", MAC_Serial_cn2);
+			ESP_LOGI(TAG, "%s", MAC_Serial_cn1);
+			ESP_LOGI(TAG, "%s", MAC_Serial_cn2);
 			esp_wifi_scan_stop();
 			esp_wifi_stop();
 			n++;
@@ -4167,7 +4167,7 @@ static void wifi_scan(void)
 		ESP32_Clock_Config(20, 20, false);
 		Flag_wifi_scanning = false;
 		vTaskDelay(1000/RTOS_TICK_PERIOD_MS);
-		if(VTAG_Configure.MA != 1 && FlagSendLR ==1)
+		if(VTAG_Configure.MA != 1)
 		{
 			acc_power_up();
 		}
@@ -5364,7 +5364,7 @@ void main_task(void *arg)
 			ESP_sleep(1);
 		}
 		//Flag_config = true de chan nhay vao ham nay khi co return sms
-		if(ProgramRun_Cause == ESP_SLEEP_WAKEUP_TIMER && Flag_motion_detected == false && (Flag_config == true || Check_vol_percent != NO_AC))
+		if(ProgramRun_Cause == ESP_SLEEP_WAKEUP_TIMER && Flag_motion_detected == false && Flag_config == true && Check_vol_percent != NO_AC)
 		{
 			loopmain_reason = CHECK_PIN;
 			saveLoopReason();
@@ -5506,8 +5506,8 @@ void main_task(void *arg)
 					saveLoopReason();
 					// trigged pwrkey and check at command
 					CheckAtCommand();
-					VTAG_MessType_G = SEND_BACKUP;
-					MQTT_SendMessage_Thread(SEND_BACKUP);
+					VTAG_MessType_G = UNPAIR_GET;
+					MQTT_SendMessage_Thread(UNPAIR_GET);
 					ProgramRun_Cause = ESP_SLEEP_WAKEUP_TIMER;
 					ESP_sleep(1);
 					goto ESP_NOTSLEEP;
@@ -5520,7 +5520,7 @@ void main_task(void *arg)
 				receive_sms();
 			}
 			Flag_config = true; // reset true ke ca co convert hay k
-			if((VTAG_Configure.MA != 0 || FlagSendLR == 1) && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED)
+			if(VTAG_Configure.MA != 0 && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED)
 			{
 				//ESP_LOGI(TAG, "turn off detect sensor after message");
 				Flag_motion_detected = false;
@@ -6041,8 +6041,7 @@ void Fota2G_processing_task(void *arg)
 				char str[150];
 				sprintf(str, "{\"M\":%d,\"P\":%d,\"Type\":\"%s\",\"CC\":%d,\"N\":%d,\"a\":%d,\"T\":\"%s\",\"_ss\":%d,\"WM\":%d,\"_lc\":%d, \"MA\":%d}",\
 						VTAG_Configure.Mode,VTAG_Configure.Period,VTAG_Configure.Type,VTAG_Configure.CC,VTAG_Configure.Network,\
-						VTAG_Configure.Accuracy,VTAG_Configure.Server_Timestamp,VTAG_Configure._SS, VTAG_Configure.WM, \
-						VTAG_Configure._lc, 1);
+						VTAG_Configure.Accuracy,VTAG_Configure.Server_Timestamp,VTAG_Configure._SS, VTAG_Configure.WM, 1, 1);
 				writetofile(base_path, "test.txt", str);
 				//				Flag_test_connectSimcom = true;
 				VTAG_MessType_G = FOTA_SUCCESS;

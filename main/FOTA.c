@@ -281,8 +281,7 @@ void mqtt_contol_ack(void *arg)
 			char str[150];
 			sprintf(str, "{\"M\":%d,\"P\":%d,\"Type\":\"%s\",\"CC\":%d,\"N\":%d,\"a\":%d,\"T\":\"%s\",\"_ss\":%d,\"WM\":%d,\"_lc\":%d, \"MA\":%d}",\
 					VTAG_Configure.Mode,VTAG_Configure.Period,VTAG_Configure.Type,VTAG_Configure.CC,VTAG_Configure.Network,\
-					VTAG_Configure.Accuracy,VTAG_Configure.Server_Timestamp,VTAG_Configure._SS, VTAG_Configure.WM, \
-					VTAG_Configure._lc, 1);
+					VTAG_Configure.Accuracy,VTAG_Configure.Server_Timestamp,VTAG_Configure._SS, VTAG_Configure.WM, 1, 1);
 			writetofile(base_path, "test.txt", str);
 			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOSS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, 0, VTAG_Version_next, Network_Type_Str, VTAG_Configure.Network);
 			err = esp_mqtt_client_publish(client, MQTT_ID_Topic, Mqtt_TX_Str, strlen(Mqtt_TX_Str), 1, 0);

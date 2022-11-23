@@ -268,7 +268,7 @@ typedef void (*SIMCOM_SendATCallBack_t)(SIMCOM_ResponseEvent_t event, void *Resp
 // Device ID
 //#define Device_ID_TW 			"c6118176-b3a9-4c70-8a46-2685edb35d57"									// TW_1
 //#define Device_ID_TW			"ee5db00a-b105-49cf-aeab-c4d0a34bc7e9"									// TW_5
-#define Device_ID_TW			"MAN02ND00160"									// TW_KIT
+#define Device_ID_TW			"MAN02ND00009"									// TW_KIT
 
 #define MQTT_TX_Str_Buf_Lenght	1000
 

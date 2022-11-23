@@ -16,7 +16,7 @@ extern bool Flag_MQTT_Connected;
 extern bool Flag_MQTT_Sub_OK;
 extern bool Flag_MQTT_Publish_OK;
 extern bool Flag_MQTT_SubMessage_Processing;
-
+extern bool Flag_sms_receive;
 extern uint8_t stepConn;
 extern uint8_t stepDisconn;
 extern uint8_t stepSendData;
@@ -249,6 +249,10 @@ void MQTT_SubReceive_Wait(uint16_t Timeout)
 				Flag_backup_data = true;
 				Backup_reason = MQTT_SUB_REC;
 				BackUp_UnsentMessage(VTAG_MessType_G);
+				if(Flag_sms_receive == true || VTAG_MessType_G == FOTA_START|| VTAG_MessType_G == FOTA_FAIL ||  VTAG_MessType_G == FOTA_SUCCESS)
+				{
+					return;
+				}
 				//TurnOff7070G();
 			}
 			MQTT_Sub_Timeout_Counter = 0;
