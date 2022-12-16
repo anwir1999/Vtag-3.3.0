@@ -58,7 +58,7 @@
 
 char Network_Type_Str[10];
 
-#define DAM_BUF_TX 512
+#define DAM_BUF_TX 1024
 #define DAM_BUF_RX 2049
 #define MAX_RETRY	10
 
@@ -140,7 +140,8 @@ typedef enum
 	MODE_CC1,			//19
 	SMS_RECEIVE,		//20
 	SMS_RECEIVE_PAST, 	//21
-	BACKUP_MESS			//22
+	BACKUP_MESS,			//22
+	START_MAIN			//22
 }loopmain_reason_t;
 typedef enum
 {
@@ -268,7 +269,7 @@ typedef void (*SIMCOM_SendATCallBack_t)(SIMCOM_ResponseEvent_t event, void *Resp
 // Device ID
 //#define Device_ID_TW 			"c6118176-b3a9-4c70-8a46-2685edb35d57"									// TW_1
 //#define Device_ID_TW			"ee5db00a-b105-49cf-aeab-c4d0a34bc7e9"									// TW_5
-#define Device_ID_TW			"MAN02ND00009"									// TW_KIT
+#define Device_ID_TW			"MAN02ND10485"									// TW_KIT
 
 #define MQTT_TX_Str_Buf_Lenght	1000
 

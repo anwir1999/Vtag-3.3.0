@@ -35,6 +35,8 @@ extern RTC_DATA_ATTR char DeviceID_TW_Str[50];
 extern RTC_DATA_ATTR uint8_t Reboot_reason;
 extern RTC_DATA_ATTR BU_reason Backup_reason;
 extern bool Flag_test_connectSimcom;
+extern bool Flag_motion_detected;
+extern int counter_test_connectSimcom;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void MQTT_Connect_Callback(SIMCOM_ResponseEvent_t event, void *ResponseBuffer)
 {
@@ -102,8 +104,11 @@ void MQTT_Disconnected_Callback(SIMCOM_ResponseEvent_t event, void *ResponseBuff
 		{
 		case 0:
 			ESP_LOGW(TAG, "MQTT disconnect ok\r\n");
+			//			if(VTAG_Configure.MA == 0 && Flag_motion_detected == true)
+			//			{
 			//				ATC_SendATCommand("AT+CNACT=0,0\r\n", "DEACTIVE", 3000, 3, MQTT_Disconnected_Callback);
 			//				break;
+			//			}
 		case 1:
 			ESP_LOGW(TAG, "Stop network ok\r\n");
 			Flag_MQTT_Stop_OK = true;
@@ -309,21 +314,21 @@ void MQTT_BatteryAlert_Payload_Convert(char *type)
 	MQTT_DevConf_Payload_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, type, VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, VTAG_DeviceParameter.Device_Timestamp, VTAG_Vesion, VTAG_DeviceParameter.Bat_Level, Network_Type_Str, VTAG_Configure.Network, VTAG_Configure._SS, VTAG_Configure.WM, VTAG_Configure._lc , VTAG_Configure.MA);
 }
 
-void MQTT_DevConf_FOTA_Convert(char *str, int16_t ss, uint8_t cc, char *type, int16_t rq, uint16_t p, uint8_t m, long ts, char *version, char *cn, uint8_t n)
+void MQTT_DevConf_FOTA_Convert(char *str, int16_t ss, uint8_t cc, char *type, int16_t rq, uint16_t p, uint8_t m, long ts, char *version, char *cn, uint8_t n, int WM, int MA, int _lc)
 {
 	memset(str, 0, MQTT_TX_Str_Buf_Lenght);
-	sprintf(str,"{\"ss\":%d,\"CC\":%d,\"Type\":\"%s\",\"r\":%d,\"MMC\":{\"P\":%d,\"M\":%d},\"T\":%ld,\"V\":\"%s\",\"Cn\":\"%s\",\"N\":%d,\"RR\":%d%d}", ss, cc, type, rq, p, m, ts, version, cn, n, Reboot_reason, Backup_reason);
+	sprintf(str,"{\"ss\":%d,\"CC\":%d,\"Type\":\"%s\",\"r\":%d,\"MMC\":{\"P\":%d,\"M\":%d},\"T\":%ld,\"V\":\"%s\",\"Cn\":\"%s\",\"N\":%d,\"WM\":%d,\"MA\":%d,\"lc\":%d,\"RR\":%d%d}", ss, cc, type, rq, p, m, ts, version, cn, n, WM, MA, _lc, Reboot_reason, Backup_reason);
 }
 
 void MQTT_DevConf_Payload_Convert(char *str, int16_t ss, uint8_t cc, char *type, int16_t rq, uint16_t p, uint8_t m, long ts, char *version, uint8_t bat_level, char *cn, uint8_t n, int _ss, int WM, int _lc, int MA)
 {
 	memset(str, 0, MQTT_TX_Str_Buf_Lenght);
-	sprintf(str,"{\"ss\":%d,\"CC\":%d,\"Type\":\"%s\",\"r\":%d,\"MMC\":{\"P\":%d,\"M\":%d},\"T\":%ld,\"V\":\"%s\",\"B\":%d,\"Cn\":\"%s\",\"N\":%d,\"_ss\":%d,\"WM\":%d, \"_lc\":%d,\"MA\":%d,\"RR\":%d%d}", ss, cc, type, rq, p, m, ts, version, bat_level, cn, n, _ss, WM,_lc,MA, Reboot_reason, Backup_reason);
+	sprintf(str,"{\"ss\":%d,\"CC\":%d,\"Type\":\"%s\",\"r\":%d,\"MMC\":{\"P\":%d,\"M\":%d},\"T\":%ld,\"V\":\"%s\",\"B\":%d,\"Cn\":\"%s\",\"N\":%d,\"_ss\":%d,\"WM\":%d, \"lc\":%d,\"MA\":%d,\"RR\":%d%d}", ss, cc, type, rq, p, m, ts, version, bat_level, cn, n, _ss, WM,_lc,MA, Reboot_reason, Backup_reason);
 }
 void MQTT_DonDevConf_Payload_Convert(char *str, int16_t ss, uint8_t cc, char *type, int16_t rq, uint16_t p, uint8_t m, long ts, char *version, uint8_t bat_level, char *cn, uint8_t n, int _ss, int WM, int _lc, int MA, char *loopReason)
 {
 	memset(str, 0, MQTT_TX_Str_Buf_Lenght);
-	sprintf(str,"{\"ss\":%d,\"CC\":%d,\"Type\":\"%s\",\"r\":%d,\"MMC\":{\"P\":%d,\"M\":%d},\"T\":%ld,\"V\":\"%s\",\"B\":%d,\"Cn\":\"%s\",\"N\":%d,\"_ss\":%d,\"WM\":%d, \"_lc\":%d,\"MA\":%d,\"RR\":%d%d,\"LR\":\"%s\"}", ss, cc, type, rq, p, m, ts, version, bat_level, cn, n, _ss, WM,_lc,MA, Reboot_reason, Backup_reason, loopReason);
+	sprintf(str,"{\"ss\":%d,\"CC\":%d,\"Type\":\"%s\",\"r\":%d,\"MMC\":{\"P\":%d,\"M\":%d},\"T\":%ld,\"V\":\"%s\",\"B\":%d,\"Cn\":\"%s\",\"N\":%d,\"_ss\":%d,\"WM\":%d, \"lc\":%d,\"MA\":%d,\"RR\":%d%d,\"LR\":\"%s\"}", ss, cc, type, rq, p, m, ts, version, bat_level, cn, n, _ss, WM,_lc,MA, Reboot_reason, Backup_reason, loopReason);
 }
 void MQTT_DevConf_Payload_Convert_Startup(char *str, int16_t ss, uint8_t cc, char *type, int16_t rq, uint16_t p, uint8_t m, long ts, char *version, uint8_t bat_level, char *IMSI, uint8_t n)
 {

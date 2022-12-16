@@ -69,7 +69,7 @@ extern const uint8_t ulp_main_bin_end[]   asm("_binary_ulp_main_bin_end");
 const char *TAG = "VTAG_ESP32";
 
 #define	ENABLE_SLEEP_AT_STARTUP 0
-#define BU_Arr_Max_Num 		 	10
+#define BU_Arr_Max_Num 		 	13
 #define SS_THR 65
 #define VOFF_SET	20
 #define THRESHOLD   3970
@@ -80,14 +80,14 @@ char SMS_MessageReceive[400] = "";
 char MAC_Serial_Cur[250] = {0};
 char MAC_Serial_Pre[250] = {0};
 char MAC_Weak_Serial_Pre[250] = {0};
-RTC_DATA_ATTR char VTAG_Vesion[10]		    =		"S3.4.3";
+RTC_DATA_ATTR char VTAG_Vesion[10]		    =		"S3.4.4";
 RTC_DATA_ATTR char VTAG_Version_next[10] 	=		{0};
 RTC_DATA_ATTR char DeviceID_TW_Str[50]= "";
-RTC_DATA_ATTR char Location_Backup_Array[BU_Arr_Max_Num][540];
+RTC_DATA_ATTR char Location_Backup_Array[BU_Arr_Max_Num][530];
 RTC_DATA_ATTR uint8_t Backup_Array_Counter = 0;
 RTC_DATA_ATTR bool Flag_Sim7070G_Started = false;
 RTC_DATA_ATTR bool Flag_check_run = false;
-RTC_DATA_ATTR CFG VTAG_Configure = {.Period = 5, .Mode = 1, .Network = 2, .CC = 1, ._SS = 1, .WM = 0, ._lc = 1, .MA = 0, .BT = 0, .FLR = 0, .F2G = 0};
+RTC_DATA_ATTR CFG VTAG_Configure = {.Period = 5, .Mode = 1, .Network = 2, .CC = 1, ._SS = 1, .WM = 0, ._lc = 0, .MA = 0, .BT = 0, .FLR = 0, .F2G = 0};
 RTC_DATA_ATTR uint8_t Retry_count = 0;
 RTC_DATA_ATTR bool Flag_motion_detected = false;
 RTC_DATA_ATTR bool Flag_period_wake = true;
@@ -119,8 +119,6 @@ RTC_DATA_ATTR float Calib_adc_factor = 1;
 RTC_DATA_ATTR float Calib_Pin_factor = 1;
 RTC_DATA_ATTR uint8_t Flag_count_nb_backup = 0;
 RTC_DATA_ATTR bool Flag_use_2g = false;
-RTC_DATA_ATTR bool Flag_config_sms = false; // trong che do only GPS, neu do dc GPS thì flag = true
-//RTC_DATA_ATTR bool Flag_simcom_cpos = false; // trong che do only GPS, neu do dc GPS thì flag = true
 bool Flag_config_sendLocation = false;
 CFG VTAG_Configure_temp;
 
@@ -150,8 +148,6 @@ Device_Flag VTAG_Flag;
 VTAG_MessageType VTAG_MessType_G;
 RTC_DATA_ATTR uint32_t AP_count_pre = 0;
 RTC_DATA_ATTR uint32_t test_bk = 0;
-RTC_DATA_ATTR time_t timestampSMS = 0;
-RTC_DATA_ATTR int count_loop = 0;
 //--------------------------------------------------------------------------------------------------------------// Define for common operating flags
 bool Flag_ScanNetwok = false;
 bool Flag_Cycle_Completed = false;
@@ -222,11 +218,21 @@ bool Flag_location_send_1 = false;
 bool Flag_location_send_2 = false;
 bool Flag_skip_rst_acc_ISR = false;
 bool wifi_motion_detect = true;
+
 bool Flag_sms_receive = false; // true neu nhu nhan ban tin sms hoac chan RI
-bool Flag_config = false; // true neu dang trong qua trinh gui ban tin
-bool Flag_wifi_detected = false;
-//bool Flag_bleRstWdt = false; //reset wdt sau moi 30s
-RTC_DATA_ATTR bool Flag_test_connectSimcom = false;
+bool Flag_config = true; // flag xu ly viec cau hinh sms. Bang false neu nhan sms va chua convert
+bool Flag_wifidt_onetime = false; //flag su dung ham wifi motion 1 lan
+bool Flag_fota_by2G = false; // flag de fota 2g
+bool Flag_i2cTurnOff = false;// flag tat i2c khi thiet bi di ngu
+RTC_DATA_ATTR bool Flag_test_connectSimcom = false; // test cac chuc nang lien quan backup
+RTC_DATA_ATTR int count_wifi_dt = 60;
+RTC_DATA_ATTR bool Flag_config_sms = false; // config neu nhan tin nhan chua cau hinh khac voi cau hinh cu
+RTC_DATA_ATTR int Count_wifidt_loop = 0; // test loop scan wifi ( = 2)
+RTC_DATA_ATTR bool Flag_wifidt_sleep1 = false; // trigger timer sleep cho viec wifi motion
+bool Flag_wifidt_sleep2 = false;// trigger timer sleep cho viec wifi motion
+RTC_DATA_ATTR bool Flag_simcomWakeSleep = false; // check xem sim com ngu hay la tat
+RTC_DATA_ATTR time_t timestampSMS = 0; // time khi nhan sms, remove tin nhan qua khu
+RTC_DATA_ATTR bool flag_sms_gpio = false; //xet ngat chan ri
 //--------------------------------------------------------------------------------------------------------------//
 //uint8_t VTAG_TrackingMode = 0;
 //uint32_t VTAG_TrackingPeriod = 0;
@@ -249,7 +255,6 @@ uint8_t charging_time = 0;
 uint16_t RTOS_TICK_PERIOD_MS = portTICK_PERIOD_MS;
 uint32_t VTAG_Tracking_Period = 120; // Second
 uint8_t button_led_indcator = 0;
-uint8_t wifi_detect_int =0;
 int count_down_minutes = 20;
 int num_sms = 0;
 int FlagSendLR = 0;
@@ -643,13 +648,11 @@ void Check_accuracy()
 //--------------------------------------------------------------------------------------------------------------// test AT command
 void CheckAtCommand(void)
 {
-	//ESP_LOGW(TAG, "Power on Sim7070G\r\n");
+	ESP_LOGW(TAG, "Power on Sim7070G\r\n");
 	gpio_set_level(UART_SW, 0);
-	gpio_set_level(DTR_Sim7070_3V3, 0);
-	//			TurnOn7070G_DTR();
 	CHECK_AT:
 	// Check AT response
-	//ESP_LOGE(TAG, "Start program\r\n");
+	ESP_LOGE(TAG, "Start program\r\n");
 	ATC_SendATCommandOptimize("AT\r\n", "OK", 1000, 1, ATResponse_Callback);
 	if(AT_RX_event == EVEN_TIMEOUT || AT_RX_event == EVEN_ERROR)
 	{
@@ -658,15 +661,17 @@ void CheckAtCommand(void)
 		vTaskDelay(4000 / RTOS_TICK_PERIOD_MS);
 		goto CHECK_AT;
 	}
-	// Get battery percent
-	//Check_battery();
-	ATC_SendATCommandOptimize("AT+CSCLK=0\r\n", "OK", 1000, 2, ATResponse_Callback);
-	if(AT_RX_event == EVEN_TIMEOUT || AT_RX_event == EVEN_ERROR)
+	if(Flag_simcomWakeSleep == true)
 	{
-		Flag_Cycle_Completed = true;
-		TurnOn7070G();
-		vTaskDelay(4000 / RTOS_TICK_PERIOD_MS);
-		goto CHECK_AT;
+		Flag_simcomWakeSleep = false;
+		ATC_SendATCommandOptimize("AT+CSCLK=0\r\n", "OK", 1000, 2, ATResponse_Callback);
+		if(AT_RX_event == EVEN_TIMEOUT || AT_RX_event == EVEN_ERROR)
+		{
+			Flag_Cycle_Completed = true;
+			TurnOn7070G();
+			vTaskDelay(4000 / RTOS_TICK_PERIOD_MS);
+			goto CHECK_AT;
+		}
 	}
 }
 //--------------------------------------------------------------------------------------------------------------// Check battery
@@ -901,7 +906,7 @@ static void charging_task(void *arg)
 			batt_vol_prev = read_battery();
 			//ESP_LOGW(TAG,"VBAT prev =  %.1f mV\r\n",batt_vol_prev);
 			charging_time++;
-			//ESP_LOGE(TAG,"charging_time: %d\r\n", charging_time);
+			ESP_LOGE(TAG,"charging_time: %d\r\n", charging_time);
 		}
 		vTaskDelay(5000/RTOS_TICK_PERIOD_MS);
 	}
@@ -1251,7 +1256,7 @@ void BackUp_UnsentMessage(VTAG_MessageType Mess_Type)
 			}
 		}
 	}
-	//ESP_LOGW(TAG, "Backup data list:\r\n");
+	ESP_LOGW(TAG, "Backup data list:\r\n");
 	for(int i = 0; i < Backup_Array_Counter; i++)
 	{
 		if(strstr(Location_Backup_Array[i],"re"))
@@ -1266,15 +1271,15 @@ void BackUp_UnsentMessage(VTAG_MessageType Mess_Type)
 				}
 			}
 		}
-		//ESP_LOGW(TAG, "Data %d: %s\r\n", i, Location_Backup_Array[i]);
+		ESP_LOGW(TAG, "Data %d: %s\r\n", i, Location_Backup_Array[i]);
 	}
 	ESP_sleep(1);
 	//	Flag_config = true;
 	if(!Flag_sms_receive)
 	{
 		goto BACK_UP;
-		Flag_Unpair_Task = false;
-		Flag_sos = false;
+//		Flag_Unpair_Task = false;
+//		Flag_sos = false;/
 	}
 }
 
@@ -1391,6 +1396,22 @@ static void button_processing_task(void* arg)
 					//					loopbutton_reason = BT_RESTART;
 					//					saveLoopReason();
 					Flag_new_firmware_led = true;
+					if(Flag_wifi_loop == true)
+					{
+						// Count_wifidt_loop = 1, den xanh nhay
+						Flag_wifi_loop = false;
+						gpio_set_level(LED_1, 1);
+						vTaskDelay(200/portTICK_PERIOD_MS);
+						gpio_set_level(LED_1, 0);
+					}
+					else
+					{
+						// Count_wifidt_loop = 2, den do nhay
+						Flag_wifi_loop = true;
+						gpio_set_level(LED_2, 1);
+						vTaskDelay(200/portTICK_PERIOD_MS);
+						gpio_set_level(LED_2, 0);
+					}
 					break;
 				case B_UNPAIR:
 					//					loopbutton_reason = BT_UNPAIR;
@@ -1477,7 +1498,7 @@ static void button_processing_task(void* arg)
 						//						loopbutton_reason = BT_DEFAULT;
 						//						saveLoopReason();
 						Flag_button_do_nothing = true;
-//						ESP_LOGW(TAG,"Press button: default\r\n");
+						//						ESP_LOGW(TAG,"Press button: default\r\n");
 						ESP_sleep(0);
 					}
 					break;
@@ -1520,12 +1541,12 @@ static void gpio_task_example(void* arg)
 					Flag_charged = true;
 					Flag_charge_in_wake = true;
 					charging_time = 0;
-					//ESP_LOGE(TAG,"charging_time: %d\r\n", charging_time);
+					ESP_LOGE(TAG,"charging_time: %d\r\n", charging_time);
 					Flag_Charge_Delay_Start = false;
 					Charge_Delay_Counter = 0;
 					state = IN_CHARGING;
 					Flag_FullBattery = false;
-					//ESP_LOGE(TAG,"Charging\r\n");
+					ESP_LOGE(TAG,"reset Flag_FullBattery\r\n");
 					// Init for ULP
 					init_ulp_program();
 					/* Start the ULP program */
@@ -1541,7 +1562,7 @@ static void gpio_task_example(void* arg)
 						ESP32_GPIO_Output_Config();
 						state = STOP_CHARGING;
 						Flag_Charge_Delay_Start = true;
-						//ESP_LOGE(TAG,"START\r\n");
+						ESP_LOGE(TAG,"START\r\n");
 						//						vTaskDelay(3000 / RTOS_TICK_PERIOD_MS);
 						//						float batt_vol_now = read_battery();
 						//						//ESP_LOGW(TAG,"VBAT now =  %.1f mV\r\n",batt_vol_now);
@@ -1633,7 +1654,7 @@ static void gpio_task_example(void* arg)
 						ESP_LOGE(TAG,"Long press: SOS\r\n");
 						Button_Long_Pressed_counter = true;
 						Flag_button_long_press_led = true;
-//						ESP_LOGW(TAG,"Button pressed duration: %d ms\r\n", Button_Pressed_Duration);
+						//						ESP_LOGW(TAG,"Button pressed duration: %d ms\r\n", Button_Pressed_Duration);
 						Flag_sos = true;
 						//						loopbutton_reason = BT_SOS;
 						//						saveLoopReason();
@@ -1651,6 +1672,14 @@ static void gpio_task_example(void* arg)
 					}
 					Flag_Button_EndCheck_Start = true;
 					Button_Pressed_Duration = 0;
+				}
+			}
+			if(io_num == RI_Sim7070_3V3)
+			{
+				if(gpio_get_level(io_num) == 0)
+				{
+					ESP_LOGE(TAG,"have a sms\r\n");
+					flag_sms_gpio = true;
 				}
 			}
 		}
@@ -1715,6 +1744,7 @@ void ESP32_GPIO_Input_Init(void)
 	gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
 	gpio_isr_handler_add(BUTTON, gpio_isr_handler, (void*) BUTTON);
 	gpio_isr_handler_add(CHARGE, gpio_isr_handler, (void*) CHARGE);
+	gpio_isr_handler_add(RI_Sim7070_3V3, gpio_isr_handler, (void*) RI_Sim7070_3V3);
 }
 //--------------------------------------------------------------------------------------------------------------// ADC function
 void Bat_ADC_Init(void)
@@ -1738,7 +1768,7 @@ void ESP32_Clock_Config(int Freq_Max, int Freq_Min, bool LighSleep_Select)
 		//ESP_LOGW(TAG, "CPU clock: %d\r\n", esp_clk_cpu_freq()/1000000);
 		vTaskDelay(100 / RTOS_TICK_PERIOD_MS);
 	}
-	//ESP_LOGW(TAG, "CPU clock after reconfiguring: %d\r\n", esp_clk_cpu_freq()/1000000);
+	ESP_LOGW(TAG, "CPU clock after reconfiguring: %d\r\n", esp_clk_cpu_freq()/1000000);
 }
 //--------------------------------------------------------------------------------------------------------------// SMS functions
 //void Set7070ToSleepMode(void)
@@ -2029,11 +2059,8 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 	stepConn = stepDisconn = stepSendData = 0;
 	int catch_cell = 0;
 	Flag_config = true;
-	//	Flag_Wait_Exit = false;
-	//	ATC_SendATCommand("AT+CFUN=0\r\n", "OK", 10000, 1, ATResponse_Callback);
-	//	WaitandExitLoop(&Flag_Wait_Exit);
 	Flag_Wait_Exit = false;
-	ATC_SendATCommand("AT+CFUN=1\r\n", "OK", 10000, 1, SetCFUN_1_Callback);
+	ATC_SendATCommand("AT+CFUN=1\r\n", "OK", 10000, 0, SetCFUN_1_Callback);
 	WaitandExitLoop(&Flag_Wait_Exit);
 
 	if(AT_RX_event == EVEN_ERROR || AT_RX_event == EVEN_TIMEOUT)
@@ -2048,13 +2075,13 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 			BackUp_UnsentMessage(Mess_Type);
 			if(Flag_sms_receive == true || Mess_Type == FOTA_START|| Mess_Type == FOTA_FAIL ||  Mess_Type == FOTA_SUCCESS)
 			{
-				vTaskDelay(2000/RTOS_TICK_PERIOD_MS);
+//				vTaskDelay(200/RTOS_TICK_PERIOD_MS);
 				return;
 			}
 		}
 	}
 	//Náº¿u cháº¿ Ä‘á»™ chá»�n máº¡ng lÃ  NB thÃ¬ dÃ² NB, náº¿u k cÃ³ NB thÃ¬ chuyá»ƒn GSM
-	if(VTAG_Configure.Network == 3 && Flag_LBS_need == false && VTAG_Configure.MA == 0 && Flag_sos == false && Flag_Fota == false)
+	if(VTAG_Configure.Network == 3 && Flag_LBS_need == false && VTAG_Configure.MA == 0 && Flag_sos == false && Flag_Fota == false && FlagSendLR != 1 && !Flag_config_sms)
 	{
 		//ESP_LOGW(TAG, "Scan NB IoT network %d\r\n", FlagFota2G);
 		Flag_Wait_Exit = false;
@@ -2170,7 +2197,7 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 		}
 	}
 	//Náº¿u cháº¿ Ä‘á»™ máº¡ng lÃ  GSM thÃ¬ dÃ² GSM
-	else if(VTAG_Configure.Network == 2 || Flag_LBS_need == true || Flag_sos == true || VTAG_Configure.MA != 0 || Flag_Fota == true)
+	else if(VTAG_Configure.Network == 2 || Flag_LBS_need == true || Flag_sos == true || VTAG_Configure.MA != 0 || Flag_Fota == true || FlagSendLR == 1 || Flag_config_sms)
 	{
 		test_bk++;
 		//ESP_LOGW(TAG, "Scan GSM network\r\n");
@@ -2264,7 +2291,6 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 		vTaskDelay(100 / RTOS_TICK_PERIOD_MS);
 		WaitandExitLoop(&Flag_Wait_Exit);
 	}
-	vTaskDelay(1000 / RTOS_TICK_PERIOD_MS);
 	if(AT_RX_event == EVEN_ERROR || AT_RX_event == EVEN_TIMEOUT)
 	{
 		Backup_reason = CHECK_ACT_NET;
@@ -2451,11 +2477,11 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 		//ESP_LOGE(TAG, "Send FOTA START message\r\n");
 		if(Network_Type == GSM)
 		{
-			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, 0, VTAG_Vesion, Network_Type_Str, VTAG_Configure.Network);
+			MQTT_DevConf_Payload_Convert(Mqtt_TX_Str, RSSI, VTAG_Configure.CC, "DOS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, VTAG_DeviceParameter.Device_Timestamp, VTAG_Vesion, VTAG_DeviceParameter.Bat_Level, Network_Type_Str, VTAG_Configure.Network, VTAG_Configure._SS, VTAG_Configure.WM, VTAG_Configure._lc, VTAG_Configure.MA);
 		}
 		else
 		{
-			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, 0, VTAG_Vesion, Network_Type_Str, VTAG_Configure.Network);
+			MQTT_DevConf_Payload_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, VTAG_DeviceParameter.Device_Timestamp, VTAG_Vesion, VTAG_DeviceParameter.Bat_Level, Network_Type_Str, VTAG_Configure.Network, VTAG_Configure._SS, VTAG_Configure.WM, VTAG_Configure._lc, VTAG_Configure.MA);
 		}
 	}
 	else if(Mess_Type == FOTA_FAIL)
@@ -2573,6 +2599,10 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 	else if(Mess_Type == DCF_ACK)
 	{
 		GetDeviceTimestamp();
+		if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
+		{
+			VTAG_DeviceParameter.Device_Timestamp++;
+		}
 		if(Network_Type == GSM)
 		{
 			MQTT_DevConf_Payload_Convert(Mqtt_TX_Str, RSSI, VTAG_Configure.CC, "DCF", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, VTAG_DeviceParameter.Device_Timestamp, VTAG_Vesion, VTAG_DeviceParameter.Bat_Level, Network_Type_Str, VTAG_Configure.Network, VTAG_Configure._SS, VTAG_Configure.WM, VTAG_Configure._lc, VTAG_Configure.MA);
@@ -2648,6 +2678,11 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 		writetofile(base_path, "calib.txt", calib_str);
 		//ESP_LOGI(TAG, "Calib_factor: %f \r\n", Calib_factor);
 	}
+	if(Mess_Type == FOTA_START || Mess_Type == FOTA_FAIL ||  Mess_Type == FOTA_SUCCESS)
+	{
+		ATC_SendATCommandOptimize(AT_MQTT_List[MQTT_STATE_DISC].content, "OK", 10000, 1, ATResponse_Callback);
+		return;
+	}
 	//Ä�á»•i cáº¥u hÃ¬nh thiáº¿t bá»‹ náº¿u cÃ³ sá»± thay Ä‘á»•i  Period, CC, Network vÃ  gá»­i DCF
 	if((VTAG_Configure_temp.Period != VTAG_Configure.Period || VTAG_Configure_temp.CC != VTAG_Configure.CC || \
 			VTAG_Configure_temp.Network != VTAG_Configure.Network || VTAG_Configure_temp.Mode != VTAG_Configure.Mode ||\
@@ -2706,8 +2741,11 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 		goto CONVERTPAYLOAD;
 	}
 	JSON_Analyze(Sub_Str, &VTAG_Configure);
-	timestampSMS = VTAG_DeviceParameter.Device_Timestamp;
-	printf("%ld", timestampSMS);
+	if(Mess_Type == LOCATION || Mess_Type == DCF_ACK || Mess_Type == FOTA_START)
+	{
+		timestampSMS = VTAG_DeviceParameter.Device_Timestamp;
+		printf("%ld", timestampSMS);
+	}
 	Flag_Done_Get_Accurency = true;
 
 	// Save configure to flash Pair/Unpair status
@@ -2722,7 +2760,7 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 				writetofile(base_path, "vtag_pr.txt", "U");
 				strcpy(Device_PairStatus, "U");
 				char str[100];
-				sprintf(str, "{\"M\":%d,\"P\":%d,\"Type\":\"%s\",\"CC\":%d,\"N\":%d,\"a\":%d,\"T\":\"%s\",\"_ss\":%d,\"WM\":%d,\"_lc\":%d,\"MA\":%d}", 1, 5,VTAG_Configure.Type, 1, VTAG_Configure.Network ,VTAG_Configure.Accuracy, "0", 1, 0, 1, 1);
+				sprintf(str, "{\"M\":%d,\"P\":%d,\"Type\":\"%s\",\"CC\":%d,\"N\":%d,\"a\":%d,\"T\":\"%s\",\"_ss\":%d,\"WM\":%d,\"_lc\":%d,\"MA\":%d}", 1, 5,VTAG_Configure.Type, 1, VTAG_Configure.Network ,VTAG_Configure.Accuracy, "0", 1, 1, 1, 0);
 				writetofile(base_path, "test.txt", str);
 				// Shutdown device
 				//ESP_LOGI(TAG, "Shut down V-TAG\r\n");
@@ -2773,11 +2811,6 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 		vTaskDelete(gps_processing_task_handle);
 		vTaskDelete(NULL);
 	}
-	if(Mess_Type == FOTA_START || Mess_Type == FOTA_FAIL ||  Mess_Type == FOTA_SUCCESS)
-	{
-		ATC_SendATCommandOptimize(AT_MQTT_List[MQTT_STATE_DISC].content, "OK", 10000, 1, ATResponse_Callback);
-		return;
-	}
 	if(VTAG_Configure.MA != 0)
 	{
 		//ESP_LOGI(TAG, "turn off detect sensor after DCF");
@@ -2790,7 +2823,7 @@ void MQTT_SendMessage_Thread(VTAG_MessageType Mess_Type)
 	{
 		//ESP_LOGI(TAG, "what the fuck what's that man");
 		acc_counter = (uint64_t)round(rtc_time_slowclk_to_us(rtc_time_get() - acc_capture, esp_clk_slowclk_cal_get())/1000000);
-//		ESP_LOGI(TAG, "acc_counter: %d s",(int)acc_counter);
+		//		ESP_LOGI(TAG, "acc_counter: %d s",(int)acc_counter);
 		if(acc_counter > 180 || Flag_send_DASP == true)
 		{
 			acc_counter = 0;
@@ -3418,7 +3451,7 @@ void CheckSleepWakeUpCause(void)
 	case ESP_SLEEP_WAKEUP_EXT0:
 	{
 		Flag_sms_receive = true;
-		//ESP_LOGI(TAG,"have a sms in simcom");
+		ESP_LOGI(TAG,"have a sms in simcom");
 		break;
 	}
 	case ESP_SLEEP_WAKEUP_EXT1:
@@ -3485,7 +3518,7 @@ void CheckSleepWakeUpCause(void)
 				}
 
 			}
-			//ESP_LOGE(TAG,"Wake up from GPIO %d\n", Ext1_Wakeup_Pin);
+			ESP_LOGE(TAG,"Wake up from GPIO %d\n", Ext1_Wakeup_Pin);
 		}
 		else
 		{
@@ -3508,7 +3541,7 @@ void CheckSleepWakeUpCause(void)
 #endif //SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 	case ESP_SLEEP_WAKEUP_TIMER:
 	{
-		//ESP_LOGE(TAG,"Wake up from timer. Time using deice: %ds\n", using_device_time_s);
+		ESP_LOGE(TAG,"Wake up from timer. Time using deice: %ds\n", using_device_time_s);
 		break;
 	}
 #ifdef CONFIG_EXAMPLE_TOUCH_WAKEUP
@@ -3536,7 +3569,7 @@ void CheckSleepWakeUpCause(void)
 #endif // CONFIG_EXAMPLE_ULP_TEMPERATURE_WAKEUP
 	case ESP_SLEEP_WAKEUP_UNDEFINED:
 	{
-		//ESP_LOGE(TAG,"Not a deep sleep reset\n");
+		ESP_LOGE(TAG,"Not a deep sleep reset\n");
 
 		char line_l[100] = {0};
 		long dvts = 0;
@@ -3836,8 +3869,8 @@ typedef struct {
 	int  rssi;                         /**< signal strength of AP */
 } wifi_ap_strength;
 
-RTC_DATA_ATTR wifi_ap_strength wifi_ap_pre[20];
-wifi_ap_strength wifi_ap_cur[20];
+RTC_DATA_ATTR wifi_ap_strength wifi_ap_pre[10];
+wifi_ap_strength wifi_ap_cur[10];
 bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_Current[])
 {
 #define W1  1
@@ -3845,7 +3878,7 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 #define W3  1
 #define W4 	1
 #define CNT_THR	1
-	Flag_wifi_detected = true;
+	Flag_wifidt_onetime = true;
 	Flag_mess_sended_wd = false;
 	bool Ro1 = false, Ro2 = false, Ro3 = false, Ro5 = false;
 	float  Check_Count_1 = 0, Check_Count_2 = 0, Check_Count_3 = 0, Check_Count_5 = 0, Check_total_wifi = 0, Check_weak_wifi = 0, AP_Weak_count_pre = 0, AP_Weak_count_cur = 0;
@@ -3862,17 +3895,18 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 
 	//ESP_LOGW("WIFI", "------------------> WiFi Current <------------------");
 	for (int i = 0; i < AP_count_cur; i++){
+		if (WiFi_Current[i].rssi == 0) continue;
 		ESP_LOGI("WIFI", "%s               , %02X:%02X:%02X:%02X:%02X:%02X, %d", WiFi_Current[i].ssid, WiFi_Current[i].bssid[0], WiFi_Current[i].bssid[1], WiFi_Current[i].bssid[2],\
 				WiFi_Current[i].bssid[3], WiFi_Current[i].bssid[4], WiFi_Current[i].bssid[5], WiFi_Current[i].rssi);
 		sprintf(MAC_Serial_Cur + strlen(MAC_Serial_Cur), "%s", WiFi_Current[i].macserial);
 	}
 
-	//ESP_LOGW("ROUND 1", "Check new strong WiFi appear");
+//	ESP_LOGW("ROUND 1", "Check new strong WiFi appear");
 	//	for (int i = 0; i < AP_count_pre; i++)
 	//	{
 	//		sprintf(MAC_Serial_Pre + strlen(MAC_Serial_Pre), "%s", WiFi_Previous[i].macserial);
 	//	}
-	//ESP_LOGI("ROUND 1", "MAC_Serial_Pre: %s", MAC_Serial_Pre);
+//	ESP_LOGI("ROUND 1", "MAC_Serial_Pre: %s", MAC_Serial_Pre);
 	for (int i = 0; i < AP_count_cur; i++){
 		if (abs(WiFi_Current[i].rssi) < SS_THR && WiFi_Current[i].rssi != 0)
 		{
@@ -3882,8 +3916,8 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 			}
 		}
 	}
-	//ESP_LOGE("ROUND 1", "Check_Count: %g", Check_Count_1);
-	if(Check_Count_1 > 1)
+	ESP_LOGE("ROUND 1", "Check_Count: %g", Check_Count_1);
+	if((Check_Count_1 > 2 && AP_count_cur >6) || (Check_Count_1 > 1 && AP_count_cur <=6) )
 	{
 		wd_reason = wd_reason * 10 +STR_PRE;
 		Ro1 = true;
@@ -3905,8 +3939,8 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 			}
 		}
 	}
-	//ESP_LOGE("ROUND 2", "Check_Count: %g", Check_Count_2);
-	if(Check_Count_2 > 1)
+	ESP_LOGE("ROUND 2", "Check_Count: %g", Check_Count_2);
+	if((Check_Count_2 > 2 && AP_count_pre >6) || (Check_Count_2 > 1 && AP_count_pre <=6))
 	{
 		wd_reason = wd_reason * 10 + STR_CUR;
 		Ro2 = true;
@@ -3928,7 +3962,7 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 			}
 		}
 	}
-	//ESP_LOGE("ROUND 3", "Check_Count: %g", Check_Count_3);
+	ESP_LOGE("ROUND 3", "Check_Count: %g", Check_Count_3);
 	if (Check_Count_3/AP_count_pre > 0.3)
 	{
 		wd_reason = wd_reason * 10 + CHANGE_RSSI;
@@ -3997,7 +4031,7 @@ bool wifi_detect_motion(wifi_ap_strength WiFi_Previous[], wifi_ap_strength WiFi_
 		wd_reason = wd_reason * 10 + WIFI_DISAPPEARE;
 		Ro5 = true;
 	}
-	//ESP_LOGE("ROUND 5", "Check_Count: %g", Check_Count_5);
+	ESP_LOGE("ROUND 5", "Check_Count: %g", Check_Count_5);
 
 	memset(wifi_ap_pre, 0, sizeof(wifi_ap_pre));
 	for(int i = 0; i < AP_count_cur; i++)
@@ -4043,14 +4077,13 @@ static void wifi_scan(void)
 		count_list = 0;
 		if(VTAG_Configure.WM == 1 && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED && VTAG_Configure.MA == 0 && Flag_wifi_loop)
 		{
-			count_loop = 2;
+			Count_wifidt_loop = 1;
 		}
 		else
 		{
-			count_loop = 1;
+			Count_wifidt_loop = 1;
 		}
 		acc_power_down();
-		vTaskDelay(1000/RTOS_TICK_PERIOD_MS);
 		ESP32_Clock_Config(80, 80, false);
 		wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 		esp_wifi_init(&cfg);
@@ -4070,10 +4103,10 @@ static void wifi_scan(void)
 		//ESP_LOGE(TAG, "size of ap_info%d\r\n", sizeof(ap_info));
 		//memset(ap_info, 0, sizeof(ap_info));
 		esp_wifi_set_mode(WIFI_MODE_STA);
-
-		while(n < count_loop)
+		esp_wifi_start();
+		while(n < Count_wifidt_loop)
 		{
-			esp_wifi_start();
+
 			esp_wifi_scan_start(NULL, true);
 			esp_wifi_scan_get_ap_records(&number, ap_info);
 			esp_wifi_scan_get_ap_num(&ap_count);
@@ -4082,7 +4115,7 @@ static void wifi_scan(void)
 				//ESP_LOGI(TAG, "SSID: %s", ap_info[i].ssid);
 
 				//ESP_LOGI(TAG, "BSSID: %02X:%02X:%02X:%02X:%02X:%02X", ap_info[i].bssid[0], ap_info[i].bssid[1], ap_info[i].bssid[2],\=
-						//ap_info[i].bssid[3], ap_info[i].bssid[4], ap_info[i].bssid[5]);
+				//ap_info[i].bssid[3], ap_info[i].bssid[4], ap_info[i].bssid[5]);
 				//ESP_LOGI(TAG, "RSSI: %d", ap_info[i].rssi);
 				if(n == 0)
 				{
@@ -4120,10 +4153,13 @@ static void wifi_scan(void)
 			ESP_LOGI(TAG, "%s", MAC_Serial_cn1);
 			ESP_LOGI(TAG, "%s", MAC_Serial_cn2);
 			esp_wifi_scan_stop();
-			esp_wifi_stop();
 			n++;
-			vTaskDelay(300/portTICK_PERIOD_MS);
+			if(Count_wifidt_loop >= 1)
+			{
+				vTaskDelay(100/portTICK_PERIOD_MS);
+			}
 		}
+		esp_wifi_stop();
 		esp_wifi_deinit();
 		if(count_list > 0)
 		{
@@ -4166,7 +4202,6 @@ static void wifi_scan(void)
 		}
 		ESP32_Clock_Config(20, 20, false);
 		Flag_wifi_scanning = false;
-		vTaskDelay(1000/RTOS_TICK_PERIOD_MS);
 		if(VTAG_Configure.MA != 1)
 		{
 			acc_power_up();
@@ -5206,7 +5241,7 @@ void receive_sms()
 		//ESP_LOGI(TAG, "date time: %s", stringDateTime);
 		timestampSMSFuture = string_to_seconds(stringDateTime);
 		//ESP_LOGI(TAG, "timestamp sms: %ld", timestampSMSFuture);
-		if(Flag_sms_receive == true && strstr(SMS_MessageReceive, "007B") && timestampSMSFuture > timestampSMS)
+		if(strstr(SMS_MessageReceive, "007B") && timestampSMSFuture > timestampSMS)
 		{
 			timestampSMS = timestampSMSFuture;
 			filter_comma_sms(SMS_MessageReceive, "007B", Sub_Str);
@@ -5299,7 +5334,8 @@ void main_task(void *arg)
 	esp_task_wdt_add(NULL);
 	esp_task_wdt_status(NULL);
 	rtc_wdt_disable();
-	//ESP_LOGW(TAG, "----------------------\r\n");
+	loopmain_reason = START_MAIN;
+	saveLoopReason();
 	while (1)
 	{
 		//ESP_LOGE(TAG, "main_task\r\n");
@@ -5328,7 +5364,10 @@ void main_task(void *arg)
 			if(Flag_FullBattery == false)
 			{
 				//				esp_sleep_enable_ext0_wakeup((ACC_INT), 0);
-				bitmap_wakeup |= 1ULL<<ACC_INT;
+				if(VTAG_Configure.MA == 0)
+				{
+					bitmap_wakeup |= 1ULL<<ACC_INT;
+				}
 				if(gpio_get_level(CHARGE) == 0)
 				{
 					bitmap_wakeup |= 1ULL<<CHARGE;
@@ -5343,6 +5382,7 @@ void main_task(void *arg)
 		// if DASP in backup array then wake and send
 		if(Flag_motion_detected == false && Backup_Array_Counter > 0 &&  esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
 		{
+			wifi_motion_detect = false;
 			loopmain_reason = SEND_BK;
 			saveLoopReason();
 			//ESP_LOGE(TAG, "Send back up array %d time \r\n", Retry_count);
@@ -5364,11 +5404,12 @@ void main_task(void *arg)
 			ESP_sleep(1);
 		}
 		//Flag_config = true de chan nhay vao ham nay khi co return sms
-		if(ProgramRun_Cause == ESP_SLEEP_WAKEUP_TIMER && Flag_motion_detected == false && Flag_config == true && Check_vol_percent != NO_AC)
+		if(ProgramRun_Cause == ESP_SLEEP_WAKEUP_TIMER && Flag_motion_detected == false && Flag_config == true && Check_vol_percent != NO_AC && Flag_wifidt_sleep1 == false && Flag_wifidt_sleep2 == false)
 		{
+			wifi_motion_detect = false;
 			loopmain_reason = CHECK_PIN;
 			saveLoopReason();
-			//ESP_LOGI(TAG, "pin or nothing");
+//			ESP_LOGI(TAG, "pin or nothing");
 			t_total_passed_vol = 0;
 			vol_checked = true;
 			Flag_mainthread_run = true;
@@ -5387,9 +5428,9 @@ void main_task(void *arg)
 		}
 		ESP_NOTSLEEP:
 		// Addded:  Flag_FullBattery == true
-		if(Flag_Cycle_Completed == true && (ProgramRun_Cause == ESP_SLEEP_WAKEUP_UNDEFINED || Flag_sms_receive || Flag_FullBattery == true|| \
+		if(Flag_Cycle_Completed == true && (ProgramRun_Cause == ESP_SLEEP_WAKEUP_UNDEFINED || Flag_sms_receive || !Flag_config || Flag_FullBattery == true|| \
 				Flag_Fota == true || Flag_sos == true || Flag_motion_detected == true || acc_counter > 180 || Flag_period_wake == true || \
-				Flag_Unpair_Task == true) && Flag_button_do_nothing == false)
+				Flag_Unpair_Task == true || flag_sms_gpio == true) && Flag_button_do_nothing == false)
 		{
 #if 0
 			if(Flag_motion_detected == true)
@@ -5409,9 +5450,7 @@ void main_task(void *arg)
 			saveLoopReason();
 			Flag_mainthread_run = true;
 			Flag_period_wake = false;
-			Flag_Cycle_Completed = false;
-			if((ProgramRun_Cause == ESP_SLEEP_WAKEUP_TIMER || ProgramRun_Cause == ESP_SLEEP_WAKEUP_EXT1) \
-					&& VTAG_Configure.WM == 1 && VTAG_Configure.MA == 0 && !Flag_config_sms && !Flag_sms_receive && !Flag_FullBattery)
+			if(ProgramRun_Cause != ESP_SLEEP_WAKEUP_UNDEFINED && VTAG_Configure.WM == 1 && VTAG_Configure.MA == 0 && !Flag_FullBattery && !Flag_test_connectSimcom)
 			{
 				//4
 				loopmain_reason = WIFI_DETECT_1;
@@ -5422,7 +5461,7 @@ void main_task(void *arg)
 					wifi_init();
 				}
 				wifi_scan();
-				if(Flag_wifi_detected == false)
+				if(Flag_wifidt_onetime == false)
 				{
 					wifi_motion_detect = wifi_detect_motion(wifi_ap_pre, wifi_ap_cur);
 				}
@@ -5430,6 +5469,8 @@ void main_task(void *arg)
 				{
 					if (Flag_send_DAST == true)
 					{
+						Flag_wifidt_sleep1 = true;
+						Flag_wifidt_sleep2 = true;
 						Flag_send_DAST = false;
 						acc_counter = 0;
 						Flag_motion_detected = false;
@@ -5437,13 +5478,13 @@ void main_task(void *arg)
 						Flag_StopMotion_led = true;
 						//						Flag_wifi_scan = true;
 					}
-					if(Flag_sos == false && Flag_Unpair_Task == false && Backup_Array_Counter == 0)
+					if(Flag_sos == false && Flag_Unpair_Task == false && Backup_Array_Counter == 0 && !Flag_config_sms && !Flag_sms_receive && !flag_sms_gpio)
 					{
-						wifi_detect_int = 1;
 						if(Flag_motion_detected == true && Flag_send_DAST == false)
 						{
 							loopmain_reason = WD1_DASP;
 							saveLoopReason();
+//							Flag_test_connectSimcom = true;
 							GetDeviceTimestamp();
 							//ESP_LOGE(TAG, "send dasp after find changing of wifi\r\n");
 							acc_counter = 0;
@@ -5482,6 +5523,8 @@ void main_task(void *arg)
 						}
 						// 6
 						Flag_send_DAST = false;
+						Flag_wifidt_sleep1 = true;
+						Flag_wifidt_sleep2 = true;
 						loopmain_reason = WD1_SLEEP;
 						saveLoopReason();
 						ATC_SendATCommandOptimize("AT\r\n", "OK", 1000, 0, ATResponse_Callback);
@@ -5500,7 +5543,7 @@ void main_task(void *arg)
 				{
 					LED_StartMove();
 				}
-				if(Flag_mess_sended_wd == false && Backup_Array_Counter > 0)
+				if(Flag_mess_sended_wd == false && Backup_Array_Counter > 0 && Flag_sos == false && Flag_Unpair_Task == false)
 				{
 					loopmain_reason = WD1_BACKUP;
 					saveLoopReason();
@@ -5514,11 +5557,19 @@ void main_task(void *arg)
 				}
 			}
 			// trigged pwrkey and check at command
+
+			if(Flag_test_connectSimcom == true)
+			{
+				Flag_test_connectSimcom = false;
+			}
+			TurnOn7070G();
+			vTaskDelay(4000 / RTOS_TICK_PERIOD_MS);
 			CheckAtCommand();
-			if((VTAG_Configure.MA == 1 || Flag_motion_detected == false) && Flag_sms_receive == true)
+			if((VTAG_Configure.MA == 1 || Flag_motion_detected == false) && (Flag_sms_receive == true || flag_sms_gpio == true))
 			{
 				receive_sms();
 			}
+			flag_sms_gpio = false; // reset false ke ca co convert hay k
 			Flag_config = true; // reset true ke ca co convert hay k
 			if(VTAG_Configure.MA != 0 && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED)
 			{
@@ -5528,9 +5579,9 @@ void main_task(void *arg)
 				Flag_send_DAST = false;
 			}
 			// Get battery percent
-			Flag_Wait_Exit = false;
-			SelectNB_GSM_Network(NB_IoT);
-			WaitandExitLoop(&Flag_Wait_Exit);
+//			Flag_Wait_Exit = false;
+//			SelectNB_GSM_Network(NB_IoT);
+//			WaitandExitLoop(&Flag_Wait_Exit);
 			Check_battery();
 			//Disable the RTC WDT timer
 			rtc_wdt_disable();
@@ -5580,7 +5631,7 @@ void main_task(void *arg)
 			// wake by button or charge
 			case ESP_SLEEP_WAKEUP_EXT1: // Cause by external wakeup
 			{
-				//ESP_LOGE(TAG, "ESP_SLEEP_WAKEUP_EXT1\r\n");
+//				ESP_LOGE(TAG, "ESP_SLEEP_WAKEUP_EXT1\r\n");
 				ProgramRun_Cause = ESP_SLEEP_WAKEUP_TIMER;
 				loopmain_reason = WAKEUP_EXT1;
 				saveLoopReason();
@@ -5645,9 +5696,9 @@ void main_task(void *arg)
 				// Run this operation only for GNSS period with country mode , all DAST, DASP, CFG, SOS are send via WifiCell
 				if((VTAG_Configure.CC != 1|| VTAG_Configure.MA == 1 || FlagSendLR == 1) && Flag_sos == 0 && acc_counter < 180 && Flag_send_DASP == false && Flag_send_DAST == false && Flag_Unpair_Task == false && !Flag_config_sms)
 				{
-					Flag_location_send_1 = true;
 					if(VTAG_Configure.CC == 2|| VTAG_Configure.MA == 1 || FlagSendLR == 1)
 					{
+						Flag_location_send_1 = true;
 						loopmain_reason = MODE_CC2;
 						saveLoopReason();
 						//ESP_LOGI(TAG, "mode cc = 2");
@@ -5792,6 +5843,7 @@ void main_task(void *arg)
 
 					if(Flag_config_sms)
 					{
+//						Flag_test_connectSimcom = true;
 						VTAG_MessType_G = DCF_ACK;
 						MQTT_SendMessage_Thread(DCF_ACK);
 					}
@@ -5847,6 +5899,17 @@ void main_task(void *arg)
 						break;
 					}
 				}
+				if(Flag_FullBattery == true)
+				{
+					Flag_FullBattery = false;
+					//Bat_GetPercent();
+					// MQTT operation
+					VTAG_MessType_G = FULLBATTERY;
+					MQTT_SendMessage_Thread(FULLBATTERY);
+					Ext1_Wakeup_Pin = 0;
+					ESP_sleep(1);
+					break;
+				}
 				CHECK_ERROR_CODE(esp_task_wdt_reset(), ESP_OK);
 				break;
 			}
@@ -5861,7 +5924,10 @@ void main_task(void *arg)
 					wifi_init();
 				}
 				wifi_scan();
-				wifi_detect_motion(wifi_ap_pre, wifi_ap_cur);
+				if(Flag_wifidt_onetime == false)
+				{
+					wifi_motion_detect = wifi_detect_motion(wifi_ap_pre, wifi_ap_cur);
+				}
 				//					get calib battery factor when DON
 				Check_battery();
 				read_battery();
@@ -5888,74 +5954,14 @@ void main_task(void *arg)
 		vTaskDelay(1000 / RTOS_TICK_PERIOD_MS);
 	}
 }
-//void fota_ack(void *arg)
-//{
-//	bool add_wdt = false;
-//	gpio_hold_dis(VCC_7070_EN);
-//	gpio_set_level(VCC_7070_EN, 0);
-//	vTaskDelay(500/RTOS_TICK_PERIOD_MS);
-//	int retry_send = 0;
-//	while(1)
-//	{
-//		if(Flag_Fota_fail == true && Flag_Fota == true)
-//		{
-//			if(add_wdt == false)
-//			{
-//				add_wdt = true;
-//				esp_task_wdt_init(150, ESP_OK);
-//				esp_task_wdt_add(NULL);
-//				esp_task_wdt_status(NULL);
-//
-//			}
-//			gpio_set_level(VCC_7070_EN, 1);
-//			if(retry_send > 2)
-//			{
-//				//				esp_restart();
-//				forcedReset();
-//			}
-//			retry_send++;
-//			SEND_BACKUP:
-//
-//			//ESP_LOGW(TAG, "Power on Sim7070G\r\n");
-//			TurnOn7070G();
-//			vTaskDelay(4000 / RTOS_TICK_PERIOD_MS);
-//
-//			//ESP_LOGE(TAG, "Start program\r\n");
-//			gpio_set_level(UART_SW, 0);
-//			// Check AT response
-//			ATC_SendATCommand("AT\r\n", "OK", 1000, 5, ATResponse_Callback);
-//			WaitandExitLoop(&Flag_Wait_Exit);
-//
-//			if(AT_RX_event == EVEN_TIMEOUT || AT_RX_event == EVEN_ERROR)
-//			{
-//				Flag_Cycle_Completed = true;
-//				goto SEND_BACKUP;
-//			}
-//			Check_battery();
-//			PreOperationInit();
-//			if(AT_RX_event == EVEN_TIMEOUT || AT_RX_event == EVEN_ERROR)
-//			{
-//				Flag_Cycle_Completed = true;
-//				goto SEND_BACKUP;
-//			}
-//			//Disable the RTC WDT timer
-//			rtc_wdt_disable();
-//			VTAG_MessType_G = FOTA_FAIL;
-//			MQTT_SendMessage_Thread_Fota(FOTA_FAIL);
-//			gpio_hold_dis(VCC_7070_EN);
-//			gpio_set_level(VCC_7070_EN, 0);
-//		}
-//		vTaskDelay(500 / RTOS_TICK_PERIOD_MS);
-//	}
-//}
 int isNumber(char *str)
 {
-    for (int i = 0; str[i]!= '\0'; i++)
-    {
-        if (isdigit(str[i]) == 0)
-              return 0;
-    }
-    return 1;
+	for (int i = 0; str[i]!= '\0'; i++)
+	{
+		if (isdigit(str[i]) == 0)
+			return 0;
+	}
+	return 1;
 }
 void Fota2G_processing_task(void *arg)
 {
@@ -5964,7 +5970,6 @@ void Fota2G_processing_task(void *arg)
 	rtc_wdt_disable();
 	esp_err_t ret;
 	bool Flag_wdt_1time = false;
-	//ESP_LOGI(TAG, "start fota by 2g");
 	bool Flag_Fota2GStart = true;
 	bool Flag_Fota2GSucc = false;
 	bool Flag_Fota2GFail = false;
@@ -5973,16 +5978,26 @@ void Fota2G_processing_task(void *arg)
 	{
 		if(Flag_Fota == true && FlagFota2G == 1)
 		{
+			Flag_fota_by2G = true;
 			if(!Flag_wdt_1time)
 			{
+				gpio_hold_dis(VCC_7070_EN);
+				gpio_set_level(VCC_7070_EN, 0);
+				vTaskDelay(500/RTOS_TICK_PERIOD_MS);
+				Flag_wifi_got_led = false;
+				Flag_Fota_led = true;
 				Flag_wdt_1time = true;
-				CHECK_ERROR_CODE(esp_task_wdt_init(200, true), ESP_OK);
+//				ESP_LOGI(TAG, "reinit wdt");
+				ESP32_Clock_Config(80, 80, false);
+				CHECK_ERROR_CODE(esp_task_wdt_init(800, true), ESP_OK);
 				CHECK_ERROR_CODE(esp_task_wdt_reset(), ESP_OK);
-				ESP32_Clock_Config(20, 20, false);
 			}
-			FlagFota2G = 0;
+			//			FlagFota2G = 0;
 			ResetAllParameters();
-			//ESP_LOGE(TAG, "Start program\r\n");
+			gpio_set_level(VCC_7070_EN, 1);
+//			ESP_LOGI(TAG, "start fota by 2g");
+			TurnOn7070G();
+			vTaskDelay(4000 / RTOS_TICK_PERIOD_MS);
 			// Check AT response
 			CYCLE_FOTA2G:
 			CheckAtCommand();
@@ -6017,7 +6032,10 @@ void Fota2G_processing_task(void *arg)
 				}
 				else
 				{
-					vTaskDelay(1000/RTOS_TICK_PERIOD_MS);
+					vTaskDelay(200/RTOS_TICK_PERIOD_MS);
+					Flag_wifi_got_led = false;
+					ESP32_Clock_Config(20, 20, false);
+					CHECK_ERROR_CODE(esp_task_wdt_init(200, true), ESP_OK);
 					CHECK_ERROR_CODE(esp_task_wdt_reset(), ESP_OK);
 					ret = update_2G_handle();
 					CHECK_ERROR_CODE(esp_task_wdt_reset(), ESP_OK);
@@ -6038,11 +6056,6 @@ void Fota2G_processing_task(void *arg)
 			if(Flag_Fota2GSucc == true)
 			{
 				Flag_Fota2GSucc = false;
-				char str[150];
-				sprintf(str, "{\"M\":%d,\"P\":%d,\"Type\":\"%s\",\"CC\":%d,\"N\":%d,\"a\":%d,\"T\":\"%s\",\"_ss\":%d,\"WM\":%d,\"_lc\":%d, \"MA\":%d}",\
-						VTAG_Configure.Mode,VTAG_Configure.Period,VTAG_Configure.Type,VTAG_Configure.CC,VTAG_Configure.Network,\
-						VTAG_Configure.Accuracy,VTAG_Configure.Server_Timestamp,VTAG_Configure._SS, VTAG_Configure.WM, 1, 1);
-				writetofile(base_path, "test.txt", str);
 				//				Flag_test_connectSimcom = true;
 				VTAG_MessType_G = FOTA_SUCCESS;
 				MQTT_SendMessage_Thread(FOTA_SUCCESS);
@@ -6425,7 +6438,7 @@ void app_main(void)
 	settimeofday(&epoch, &utc);
 	gettimeofday(&now, NULL);
 	//ESP_LOGW(TAG, "Time now after calib: %ld\n", now.tv_sec);
-	//ESP_LOGW(TAG, "wifi loop count: %d",count_loop);
+	//ESP_LOGW(TAG, "wifi loop count: %d",Count_wifidt_loop);
 	// Initialize NVS
 	esp_err_t ret = nvs_flash_init();
 	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)

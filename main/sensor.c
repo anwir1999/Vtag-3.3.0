@@ -49,6 +49,8 @@ extern CFG VTAG_Configure;
 extern bool wifi_motion_detect;
 extern const char *TAG;
 extern bool Flag_sleep_dtr;
+extern bool Flag_test_connectSimcom;
+extern bool Flag_i2cTurnOff;
 esp_err_t i2c_master_init(void)
 {
 	int i2c_master_port = I2C_MASTER_NUM;
@@ -146,9 +148,12 @@ static void clear_ISR_task(void *arg)
 	{
 		if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY))
 		{
-			count_ISR_I++;
-			clear_interrupt_source();
-			ESP_LOGW(TAG_SENSOR, "Interupt: %d \r\n", count_ISR_I);
+			if(!Flag_i2cTurnOff)
+			{
+				count_ISR_I++;
+				clear_interrupt_source();
+				ESP_LOGW(TAG_SENSOR, "Interupt: %d \r\n", count_ISR_I);
+			}
 			vTaskDelay(1/portTICK_RATE_MS);
 		}
 	}
@@ -191,10 +196,7 @@ static void check_motion(void* arg)
 				if(sec_count - current_dectect > 3)
 				{
 					Flag_checkmotin_end = true;
-					//					acc_capture = (uint64_t)round(rtc_time_get());
-					//					ESP_LOGW(TAG_SENSOR, "Motion detected\r\n");
-					//					Flag_motion_detected = true;
-					if(((count_ISR_I > 40 || count_ISR_P > 15 || ((count_ISR_I > 15 || count_ISR_P > 10) && Flag_motion_detected == true))))
+					if((count_ISR_I > 40 || count_ISR_P > 15 || ((count_ISR_I > 15 || count_ISR_P > 10) && Flag_motion_detected == true)))
 					{
 						if(Flag_motion_acc_wake_check == false) Flag_motion_acc_wake_check = true;
 						start_wait = false;
@@ -223,7 +225,6 @@ static void check_motion(void* arg)
 						//acc_capture = (uint64_t)round(rtc_time_slowclk_to_us(rtc_time_get(), esp_clk_slowclk_cal_get())/1000000);
 						acc_capture = (uint64_t)round(rtc_time_get());
 						ESP_LOGW(TAG_SENSOR, "Motion detected\r\n");
-
 					}
 					else
 					{
@@ -293,7 +294,7 @@ void read_3axis(void * arg)
 	signed short read_f = 0;
 	while(1)
 	{
-		if(VTAG_Configure.MA == 0)
+		if(VTAG_Configure.MA == 0 && !Flag_i2cTurnOff)
 		{
 			uint8_t read = 0;
 			signed short read_f = 0;

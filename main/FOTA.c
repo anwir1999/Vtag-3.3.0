@@ -17,7 +17,7 @@
 
 #define DIR_LINK_TEST "http://202.191.56.104:5551/uploads/fota_profile_test.txt"
 #define DIR_LINK_LIVE "http://fotasimcom7070.s3.amazonaws.com/fota_profile.txt"
-
+//#define LINK_TEST "http://202.191.56.104:5551/uploads/firmware_test1.bin"
 char rcv_buffer[200];
 static EventGroupHandle_t s_wifi_event_group;
 TaskHandle_t xHandle_SC = NULL;
@@ -33,6 +33,7 @@ extern bool Flag_Fota;
 extern bool Flag_Fota_success;
 extern bool Flag_wifi_init;
 extern bool Flag_Fota_fail;
+extern bool Flag_fota_by2G;
 extern RTC_DATA_ATTR char DeviceID_TW_Str[50];
 extern RTC_DATA_ATTR Device_Param VTAG_DeviceParameter;
 extern Network_Signal VTAG_NetworkSignal;
@@ -57,6 +58,7 @@ extern void gps_scan_task(void *arg);
 extern void gps_processing_task(void *arg);
 extern void mqtt_submessage_processing_task(void *arg);
 extern void  ResetAllParameters();
+extern void ESP32_Clock_Config(int Freq_Max, int Freq_Min, bool LighSleep_Select);
 extern void Create_Tasks();
 extern bool Flag_Fota_led;
 static void mqtt_app_start_ack(void);
@@ -77,6 +79,9 @@ bool flag_get_token = true;
 bool Flag_send_DOS = false;
 bool Flag_send_DOSS = false;
 bool Flag_mqtt_conn = false;
+bool Flag_dlt_task = false;
+bool Flag_dlt_taskSC = false;
+bool Flag_dlt_taskCT = false;
 char bufferData[300];
 /*------------------------------------bien dung cho fota 2g-------------------------------------------------*/
 int fileLenFota = 0;
@@ -107,11 +112,20 @@ static void event_handler(void *arg, esp_event_base_t event_base,int32_t event_i
 	{
 		Flag_Fota_fail = true;
 		ESP_LOGI(TAG_wifi, "WiFi disconnect\r\n");
-		if(Flag_send_DOSS == false)
+		if(Flag_send_DOSS == false && Flag_dlt_task == false)
 		{
+			Flag_dlt_task = true;
 			FlagFota2G = 1;
-			vTaskDelete(xHandle_SC);
-			vTaskDelete(time_out_handle);
+			if(Flag_dlt_taskSC == false)
+			{
+				Flag_dlt_taskSC = true;
+				vTaskDelete(xHandle_SC);
+			}
+			if(Flag_dlt_taskCT == false)
+			{
+				Flag_dlt_taskCT = true;
+				vTaskDelete(time_out_handle);
+			}
 		}
 		//		esp_wifi_connect();
 		xEventGroupClearBits(s_wifi_event_group, CONNECTED_BIT);
@@ -212,8 +226,15 @@ static void mqtt_event_handler_ack(void *handler_args, esp_event_base_t base, in
 
 	case MQTT_EVENT_DISCONNECTED:
 		Flag_mqtt_conn = false;
-		ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED, RECONNECT NOW");
-		esp_mqtt_client_reconnect(client);
+		if(Flag_fota_by2G == false)
+		{
+			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED, RECONNECT NOW");
+			esp_mqtt_client_reconnect(client);
+		}
+		else
+		{
+			ESP_LOGI(TAG, "MQTT DISCONNECTED, FOTA 2G");
+		}
 		break;
 
 	case MQTT_EVENT_SUBSCRIBED:
@@ -269,24 +290,28 @@ void mqtt_contol_ack(void *arg)
 
 			memset(MQTT_ID_Topic, 0, sizeof(MQTT_ID_Topic));
 			sprintf(MQTT_ID_Topic, "messages/%s/devconf", DeviceID_TW_Str);
-			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, 0, VTAG_Vesion, Network_Type_Str, VTAG_Configure.Network);
+			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period,\
+					VTAG_Configure.Mode, 0, VTAG_Vesion, Network_Type_Str, VTAG_Configure.Network, VTAG_Configure.WM, VTAG_Configure.MA, VTAG_Configure._lc);
+			printf("%s", Mqtt_TX_Str);
+			printf("%s", MQTT_ID_Topic);
 			err = esp_mqtt_client_publish(client, MQTT_ID_Topic, Mqtt_TX_Str, strlen(Mqtt_TX_Str), 1, 0);
-			if(err != -1) Flag_send_DOS = false;
+			if(err != -1)
+			{
+				ESP_LOGI(TAG, "STOP send dos\r\n");
+				Flag_send_DOS = false;
+			}
 			vTaskDelay(1000/portTICK_PERIOD_MS);
 		}
 		else if(Flag_mqtt_conn == true &&Flag_send_DOSS == true)
 		{
 			memset(MQTT_ID_Topic, 0, sizeof(MQTT_ID_Topic));
 			sprintf(MQTT_ID_Topic, "messages/%s/devconf", DeviceID_TW_Str);
-			char str[150];
-			sprintf(str, "{\"M\":%d,\"P\":%d,\"Type\":\"%s\",\"CC\":%d,\"N\":%d,\"a\":%d,\"T\":\"%s\",\"_ss\":%d,\"WM\":%d,\"_lc\":%d, \"MA\":%d}",\
-					VTAG_Configure.Mode,VTAG_Configure.Period,VTAG_Configure.Type,VTAG_Configure.CC,VTAG_Configure.Network,\
-					VTAG_Configure.Accuracy,VTAG_Configure.Server_Timestamp,VTAG_Configure._SS, VTAG_Configure.WM, 1, 1);
-			writetofile(base_path, "test.txt", str);
-			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOSS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period, VTAG_Configure.Mode, 0, VTAG_Version_next, Network_Type_Str, VTAG_Configure.Network);
+			MQTT_DevConf_FOTA_Convert(Mqtt_TX_Str, VTAG_NetworkSignal.RSRP, VTAG_Configure.CC, "DOSS", VTAG_NetworkSignal.RSRQ, VTAG_Configure.Period,\
+					VTAG_Configure.Mode, 0, VTAG_Version_next, Network_Type_Str, VTAG_Configure.Network, VTAG_Configure.WM, VTAG_Configure.MA, VTAG_Configure._lc);
 			err = esp_mqtt_client_publish(client, MQTT_ID_Topic, Mqtt_TX_Str, strlen(Mqtt_TX_Str), 1, 0);
 			if(err != -1)
 			{
+				ESP_LOGI(TAG, "STOP send doss\r\n");
 				Flag_Fota_led = Flag_wifi_got_led = false;
 				//				Flag_Fota = false;
 				gpio_set_level(LED_1, 1);
@@ -298,6 +323,17 @@ void mqtt_contol_ack(void *arg)
 				//				forcedReset();
 			}
 			vTaskDelay(1000/portTICK_PERIOD_MS);
+		}
+		if(Flag_fota_by2G == true)
+		{
+			ESP_LOGI(TAG, "Deinit mqtt");
+			gpio_set_level(LED_1, 1);
+			vTaskDelay(2000/portTICK_PERIOD_MS);
+			gpio_set_level(LED_1, 0);
+			esp_mqtt_client_destroy(client);
+			vTaskDelay(1000/portTICK_PERIOD_MS);
+			esp_wifi_disconnect();
+			vTaskDelete(NULL);
 		}
 		vTaskDelay(1000/portTICK_PERIOD_MS);
 	}
@@ -316,11 +352,14 @@ static void check_timeout(void *arg)
 			esp_smartconfig_stop();
 			FlagFota2G = 1;
 			ESP_LOGI(TAG, "change fota");
+			Flag_dlt_taskCT = true;
 			vTaskDelete(NULL);
 			//			esp_restart();
 		}
 		else if(start_timeout == 0)
 		{
+			Flag_dlt_taskCT = true;
+			ESP_LOGE(TAG, "STOP countdown");
 			vTaskDelete(NULL);
 		}
 	}
@@ -342,6 +381,7 @@ void smartconfig_task(void *parm)
 		}
 		if (uxBits & ESPTOUCH_DONE_BIT)
 		{
+			Flag_dlt_taskSC = true;
 			Flag_wifi_got_led = true;
 			ESP_LOGI(TAG_wifi, "smartconfig over");
 			esp_smartconfig_stop();
@@ -436,14 +476,16 @@ void check_update_task(void *pvParameter)
 					double new_version = version->valuedouble;
 					if(new_version >= FIRMWARE_VERSION || 1)
 					{
-						if(cJSON_IsString(file) && (file->valuestring != NULL))
+						if(cJSON_IsString(file)&& (file->valuestring != NULL))
 						{
 							//							printf("%s", file->valuestring);
 							strcpy((char*)url_fota, (char*)file->valuestring);
+//							strcpy((char*)url_fota, LINK_TEST);
 							printf("downloading and installing new firmware (%s)...\n", file->valuestring);
 							Flag_send_DOS = true;
 							esp_http_client_config_t ota_client_config = {
 									.url = file->valuestring,
+//									.url = LINK_TEST,
 									.cert_pem = NULL,
 									.skip_cert_common_name_check = true
 							};
@@ -871,7 +913,7 @@ esp_err_t  update_2G_handle(){
 	{
 		sprintf(bufferData, "AT+HTTPTOFS=\"%s\",\"/custapp/Xtra3.bin\"\r\n", url_fota);
 		Flag_Wait_Exit = false;
-		ATC_SendATCommand(bufferData, "+HTTPTOFS:", 300000, 1, HTTPFSesponse_Callback); // 5000
+		ATC_SendATCommand(bufferData, "+HTTPTOFS:", 360000, 1, HTTPFSesponse_Callback); // 5000
 		WaitandExitLoop(&Flag_Wait_Exit);
 	}
 	else
@@ -951,6 +993,7 @@ esp_err_t  update_2G_handle(){
 			if(cJSON_IsString(file_url) && (file_url->valuestring != NULL))
 			{
 				strcpy(url_fota, file_url->valuestring);
+//				strcpy(url_fota, LINK_TEST);
 				if(strlen(url_fota) != 0)
 				{
 					ESP_LOGI(TAG_wifi, "VTAG_Version_next:%s \r\n URL:%s", VTAG_Version_next, url_fota);

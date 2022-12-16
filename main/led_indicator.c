@@ -269,9 +269,9 @@ void LED_StopMove()
 	for(int i = 0; i < 3; i++)
 	{
 		gpio_set_level(LED_1, 1);
-		vTaskDelay(300/portTICK_PERIOD_MS);
+		vTaskDelay(200/portTICK_PERIOD_MS);
 		gpio_set_level(LED_1, 0);
-		vTaskDelay(300/portTICK_PERIOD_MS);
+		vTaskDelay(200/portTICK_PERIOD_MS);
 	}
 }
 
